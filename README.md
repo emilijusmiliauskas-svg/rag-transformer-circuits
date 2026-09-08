@@ -59,11 +59,36 @@ RERANKER_TOP_N       = 5                              # passed to the LLM
 
 Evaluation deliberately uses a **different model family from generation** — `moonshotai/kimi-k2-instruct` as judge and `BAAI/bge-large-en-v1.5` for embeddings — so the system is not grading its own work with its own weights.
 
+## A Data-Quality Problem That Outweighs All of This
+
+Reviewing this repository after the fact, the index turns out to be mostly garbage.
+
+The corpus was saved as **single-file HTML with inline base64 images**, and `SimpleDirectoryReader` ingests those files as raw text. The base64 blobs get chunked and embedded alongside the prose:
+
+| | |
+|---|---:|
+| Nodes in the vector store | 110,370 |
+| Base64/binary blobs (sampled, n=1000) | **97.7%** |
+| Estimated real prose nodes | ~2,500 |
+
+Six papers should produce a few thousand chunks. They produced a hundred and ten thousand, because `monosemanticity.html` alone is 20 MB and almost none of that is text.
+
+**This reframes every result above.** The tuning was real and the measurements are honest, but they were all made over an index that is 97.7% noise — which plausibly explains the pattern in the numbers:
+
+- **Why reranking was the biggest win by such a margin.** The cross-encoder was earning its gains partly by discarding junk the embedding retriever kept surfacing. Against a clean index, its marginal value would likely be much smaller.
+- **Why context precision sat at 0.72** in the later stages rather than the 1.0 the baseline reported.
+- **Why HyDE degraded so sharply.** A hypothetical answer embedded against a corpus dominated by base64 has far more opportunity to land on nothing useful.
+
+The fix is at ingestion, not in tuning: extract text with an HTML parser and drop `data:` URIs before chunking. **That single change would very likely dominate every gain measured in the four stages**, and the whole ablation should be re-run afterwards — the current rankings may not survive it.
+
+Kept here rather than quietly corrected, because the finding is more instructive than the tuning was: **no amount of retrieval tuning compensates for a corpus you did not inspect.** The pipeline that measured all this is sound and can re-run the moment the corpus is clean.
+
 ## Honest Limitations
 
 - **The evaluation set is 4 questions.** That is far too small to separate close configurations, and it shows: the same 512/50 setup scored 0.573 correctness in the baseline run and 0.486 in the chunking run. Differences under roughly 0.1 in these tables should be treated as noise, and the HyDE and reranking conclusions rest on gaps large enough to survive it — the 768-vs-512 comparison does not.
 - **Ground truths are hand-written by me**, so answer correctness measures agreement with my reading of the papers.
 - **Single run per configuration.** No seeds, no repeats, no confidence intervals. Repeating each configuration 3–5 times would be the first thing to add.
+- **Generation parameters are never applied.** `src/config.py` defines `LLM_TEMPERATURE = 0.01`, `LLM_TOP_P`, `LLM_MAX_NEW_TOKENS`, and `LLM_REPETITION_PENALTY`, but `initialise_llm()` passes only `api_key` and `model` to `Groq()` — nothing reads those four constants. Generation ran at the provider default rather than near-deterministic, which is the most likely cause of the run-to-run variance noted above.
 
 ## Architecture
 
