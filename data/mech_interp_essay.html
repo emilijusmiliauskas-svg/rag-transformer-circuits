@@ -1,0 +1,573 @@
+
+        <!doctype html>
+
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            
+            
+            
+            
+        <title>Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases</title>
+        <meta name="viewport" content="width=900, initial-scale=1">
+        <script src="https://distill.pub/template.v2.js"></script>
+        <d-front-matter>
+            <script type="text/json">
+                {
+                    "title": "Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases",
+                    "description": "",
+                    "authors": []
+                }
+            </script>
+        </d-front-matter>
+        
+<style>
+
+    h1 a:hover, h2 a:hover, h3 a, h3 a:hover {
+        text-decoration: none;
+        border-bottom: none;
+    }
+
+      .comment {
+        background-color: hsl(54, 78%, 96%);
+        border-left: solid hsl(54, 33%, 67%) 1px;
+        padding: 1em;
+        color: hsla(0, 0%, 0%, 0.67);
+        margin-top: 1em;
+      }
+      .comment h3 {
+        font-size: 100%;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-top: 0px;
+      }
+      .comment .commenter-description {
+        font-style: italic;
+        margin-bottom: 1em;
+        margin-top: 0px;
+      }
+      .comment .commenter-description, .comment .commenter-description a {
+        color: #777;
+        font-size: 80%;
+        line-height: 160%;
+      }
+      .comment div {
+        margin-top: 1em;
+      }
+      .comment code {
+        background: #FFF5;
+        border-color: #EEEA;
+      }
+
+
+.evidence-table {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr 1fr;
+    grid-gap: 4px;
+    margin: 40px 0px 40px 0px;
+    width: 100%;
+    min-width: 700px;
+    border-radius: 1px;
+}
+.evidence-table > .title {
+    grid-column: 1 / span 4;
+    font-weight: 500;
+    text-transform: uppercase;
+    border-bottom: 1px solid #CCC;
+}
+.evidence-table > div:not(.title) {
+    font-size: 75%;
+}
+.evidence-table > div {
+    background: #FFF;
+    padding: 1px 2px 1px 4px;
+    border-radius: 2px;
+}
+.evidence-table > div.title, .evidence-table > div.model {
+  padding-left: 0px !important;
+}
+.evidence-table > div:not(.evidence):not(.title) {
+    color: #666;
+}
+.evidence-table > .evidence {
+    color: #000;
+}
+.evidence.strong.causal{
+   background: hsl(180, 50%, 65%);
+}
+.evidence.strong{
+   background: hsl(125, 45%, 65%);
+}
+.evidence.medium.causal{
+   background: hsl(180, 42%, 80%);
+}
+.evidence.medium{
+   background: hsl(125, 40%, 80%);
+}
+.evidence.suggestive.causal{
+   background: hsl(180, 35%, 90%);
+}
+.evidence.suggestive{
+   background: hsl(125, 30%, 90%);
+}
+.evidence.na{
+   background: hsl(125, 0%, 90%);
+}
+
+d-article h2 {border-bottom: none !important;}
+d-article h3 {font-size: 26px !important;}
+d-article h4 {font-size: 16px !important; margin-top: 30px !important;}
+@media(min-width: 600px){
+    d-article hr {margin-top: 140px; margin-bottom: 120px;}
+}
+@media(max-width: 600px){
+    d-article hr {margin-top: 80px; margin-bottom: 80px;}
+}
+d-article ul, d-appendix ul {padding-left: 0px;}
+@media(max-width: 600px){
+    d-citation-list, d-footnote-list {padding-left: 10px;}
+}
+d-article > ol, d-appendix ol {padding-left: 0px !important;}
+d-article ol {padding-left: 36pt;}
+d-article ul li, d-article ol li {margin-bottom: 8px;}
+d-footnote {margin-left: -3px; margin-right: 2px;}
+
+.math-grid {display: grid; grid-auto-flow: column; grid-gap: 8px 12px; width: min-content; margin: 0px; margin-bottom: 1em; /*max-width: 100%; grid-column: text-start / gutter-end; overflow: scroll;*/}
+.math-grid > d-math {grid-row: 1; margin: 0px; display: flex; align-items: center;}
+.math-grid > d-math[block] {margin-left: -1em; margin-top: calc( -0.5em - 8px); margin-bottom: calc( -0.5em - 8px);} d-math[sub] {padding-top: 12px;}
+.math-grid > .figcaption {grid-row: 2; margin: 0px; grid-column: auto / span 1; min-width: 100px; line-height: 120%; border-top: 1px solid #CCC; padding-top: 8px;}
+
+.gdoc-image, .gdoc-image-gutter, .gdoc-image-flex {width: 100%; max-width: calc(var(--img-width) / 1.5);}
+
+@media(max-width: 800px){
+    .gdoc-image, .gdoc-image-gutter, .gdoc-image-flex {padding-right: 2%;}
+}
+
+@media(min-width: 800px){
+    .gdoc-image, .gdoc-image-gutter, .gdoc-image-flex {padding-right: 8px;}
+}
+
+.gdoc-image {grid-column: text-start / screen-end; image-rendering: -webkit-optimize-contrast;}
+.gdoc-image-gutter {grid-column: gutter / screen-end; margin: 0px; padding: 0px; margin-top: 6px;}
+.gdoc-image-flex {margin: 0px; padding: 0px;}
+d-appendix .gdoc-image img, d-appendix .gdoc-image-flex img { mix-blend-mode: darken; }
+
+p > sup, h1 > sup, h2 > sup, h3 > sup, h4 > sup, li > sup {display: none;}
+
+pre.citation {
+    font-size: 11px;
+    line-height: 15px;
+    border-left: 1px solid rgba(0, 0, 0, 0.1);
+    padding-left: 18px;
+    border: 1px solid rgba(0,0,0,0.1);
+    background: rgba(255,255,255,0.4);
+    padding: 10px 18px;
+    border-radius: 3px;
+    color: rgba(150, 150, 150, 1);
+    overflow: hidden;
+    margin-top: -12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+
+@media print {
+    @page {
+        margin: 0cm;
+    }
+    hr {
+        margin: 0px;
+        padding: 0px;
+        opacity: 0.0;
+        height: 0px;
+        page-break-after: always;
+    }
+    h2 {
+        display: block;
+        page-break-before:always;
+    }
+    .gdoc-image {
+        break-inside: avoid;
+    }
+    .base-grid,
+    distill-header,
+    d-title,
+    d-abstract,
+    d-article,
+    d-appendix,
+    distill-appendix,
+    d-byline,
+    d-footnote-list,
+    d-citation-list,
+    distill-footer {
+        --grid-template-columns: [screen-start] 1fr [page-start kicker-start middle-start text-start] 45px 45px 45px 45px 45px 45px 45px 45px [ kicker-end text-end gutter-start] 45px [middle-end] 45px [page-end gutter-end] 1fr [screen-end];
+        --grid-column-gap: 16px;
+        grid-template-columns: [screen-start] 60px [page-start kicker-start middle-start text-start] 80px 60px 60px 60px 60px 60px 60px 60px [ kicker-end text-end gutter-start] 60px [middle-end] 60px [page-end gutter-end] 1fr [screen-end];
+        grid-column-gap: 32px;
+    }
+
+    d-contents {
+        display: block;
+        justify-self: start;
+        align-self: start;
+        padding-bottom: 0.5em;
+        margin-bottom: 1em;
+        padding-left: 0.25em;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
+        border-bottom-color: rgba(0, 0, 0, 0.1);
+    }
+
+}
+
+
+table p {min-height: 16px; line-height: 1.2;}
+table td {vertical-align: top;}
+table td > * {margin: 0px; margin-top: 8px; margin-bottom: 8px; font-size: 90%;}
+
+.video-ref {
+    color: rgba(0,0,0,0.6);
+    font-size: 87%;
+    font-style: italic;
+    margin-top: -10px;
+    margin-bottom: 30px;
+}
+code {
+    white-space: pre;
+    background: #FAFAFA;
+    border-radius: 2px;
+    padding: 2px;
+    padding-top: 1px;
+    margin-left: 2px;
+    margin-right: 2px;
+    border: 1px solid #EEE;
+}
+
+/* ****************************************
+ * TOC
+ ******************************************/
+@media(max-width: 1199px){
+  d-contents {
+    display: none;
+    justify-self: start;
+    align-self: start;
+    padding-bottom: 0.5em;
+    margin-bottom: 1em;
+    padding-left: 0.25em;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+  }
+}
+d-contents a:hover {
+  border-bottom: none;
+}
+
+@media (min-width: 1200px){
+  d-contents {
+    align-self: start;
+    grid-column-start: 1 !important;
+    grid-column-end: 4 !important;
+    grid-row: auto / span 6;
+    justify-self: end;
+    margin-top:  0em;
+    padding-right: 3em;
+    padding-left: 2em;
+    border-right: 1px solid rgba(0, 0, 0, 0.1);
+    border-right-width: 1px;
+    border-right-style: solid;
+    border-right-color: rgba(0, 0, 0, 0.1);
+  }
+}
+
+d-contents nav h3 {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+
+d-contents nav div {
+  color: rgba(0, 0, 0, 0.8);
+  font-weight: bold;
+}
+
+d-contents nav a {
+  color: rgba(0, 0, 0, 0.8);
+  border-bottom: none;
+  text-decoration: none;
+}
+
+d-contents li {
+  list-style-type: none;
+}
+
+d-contents ul, d-article d-contents ul {
+  padding-left: 1em;
+}
+
+d-contents nav ul li {
+  margin-bottom: .25em;
+}
+
+d-contents nav a:hover {
+  text-decoration: underline solid rgba(0, 0, 0, 0.6);
+}
+
+d-contents nav ul {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+
+d-contents nav>div {
+  display: block;
+  outline: none;
+  margin-bottom: 0.5em;
+}
+
+d-contents nav>div>a {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+d-contents nav>div>a:hover,
+d-contents nav>ul>li>a:hover {
+    text-decoration: none;
+}
+
+    .visual-toc {
+        counter-reset: toc-heading;
+        display: grid;
+        grid-auto-flow: dense;
+        grid-template-columns: 1fr 1fr 1fr;
+        grid-column-gap: 8px;
+        grid-row-gap: 16px;
+
+        max-width: 1180px;
+        margin: auto;
+        margin-bottom: 30px;
+        padding-left: 30px;
+        padding-right: 30px;
+    }
+
+    @media (min-width: 850px) {
+        .visual-toc {
+            /* grid-gap: 8px; */
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+        }
+    }
+    @media (min-width: 1180px) {
+        .visual-toc {
+            grid-gap: 20px;
+        }
+    }
+    .visual-toc-item {
+        display: flex;
+        flex-flow: column;
+    }
+    .visual-toc-top {
+        flex-grow: 1;
+        border: 1px solid #e5e5e5;
+        border-radius: 5px;
+        overflow: hidden;
+        text-decoration: none;
+        /* box-shadow: 0px 1px 4px rgba(0,0,0,0.05); */
+        transition: box-shadow 0.35s, transform 0.35s;
+        transform: scale(1);
+        display: flex;
+        flex-flow: column;
+    }
+    .visual-toc-top:hover {
+        box-shadow: 0px 1px 4px rgba(0, 0, 0, 0.05);
+        transform: scale(1.02);
+        transition: box-shadow 0.15s, transform 0.15s;
+    }
+    .visual-toc d-tochead,
+    .visual-toc d-subhead {
+        display: block;
+        line-height: 1.3em;
+        font-size: 85%;
+        padding: 0.5em 1em 1em 1em;
+    }
+    .visual-toc d-tochead {
+        counter-increment: toc-heading;
+        color: #333;
+        font-weight: 600;
+    }
+    .visual-toc d-tochead::before {
+        display: block;
+        content: "Section " counter(toc-heading);
+        font-weight: 400;
+        text-transform: uppercase;
+        font-size: 0.6rem;
+        color: #666;
+    }
+    .visual-toc d-subhead {
+        display: none;
+        color: #666;
+        font-size: 75%;
+    }
+    .visual-toc-colab {
+        border-radius: 5px;
+        border: solid 1px rgba(0, 0, 0, 0.1);
+        margin-top: 1em;
+        padding-left: 1.2em;
+        padding-right: 1.2em;
+        padding-top: 0.25em;
+        padding-bottom: 0.25em;
+        text-transform: uppercase;
+        color: #aaa;
+        font-size: 10.5px;
+        line-height: 24px;
+        /* background-color: yellow; */
+    }
+    .visual-toc-colab > img {
+        position: relative;
+        top: 4px;
+        /* filter: grayscale(); */
+    }
+    .visual-toc-item:hover .visual-toc-colab > img {
+        filter: unset;
+    }
+
+    /* .visual-toc-top:hover,  */
+    .visual-toc-colab:hover {
+        background-color: hsl(0, 0%, 97%);
+        border-color: rgba(0, 0, 0, 0.2);
+        color: #888;
+    }
+
+    .visual-toc a {
+        display: block;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .visual-toc a :global(img) {
+        width: 100%;
+    }
+
+    .visual-toc figure {
+      margin: 0;
+    }
+
+    .visual-toc figure.gdoc-image {
+      max-width: none;
+      padding-right: 0;
+    }
+    .visual-toc-top img {
+        border-bottom: 1px solid #EEE;
+    }
+
+    h1 > a, h2 > a, h3 > a, h4 > a {
+        text-decoration: none;
+        border-bottom: none;
+    }
+
+
+
+    @media(min-width: 1000px){
+        .outset-100 {
+            margin-left: -100px;
+        }
+    }
+
+</style>
+<d-bibliography src="bibliography.bib"></d-bibliography>
+
+
+            
+        </head>
+        <body>
+            
+            
+        <div class="article-header">
+            <style>
+                .article-header { width: 100%; padding: 10px; padding-bottom: 20px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; }
+                .home-link {font-size: 100%; color: #333;}
+                a.logo {display: flex; text-decoration: none;}
+            </style>
+            <a class="logo" href="https://anthropic.com">
+            <svg width="36" height="25" viewBox="0 0 36 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M24.8304 0H19.5612L29.1696 24.1071H34.4388L24.8304 0Z" fill="#1F1F1E"/>
+                <path d="M9.60842 0L0 24.1071H5.37245L7.33753 19.0446H17.3895L19.3546 24.1071H24.727L15.1186 0H9.60842ZM9.07531 14.5676L12.3635 6.09566L15.6517 14.5676H9.07531Z" fill="#1F1F1E"/>
+            </svg>
+            </a>
+            <a class="home-link" href="https://transformer-circuits.pub/">Transformer Circuits Thread</a>
+        </div>
+        <d-title>
+            <h1>Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases</h1>
+        </d-title>
+        
+<style> d-byline { display: none; }</style>
+<div class='d-byline-container base-grid'><p style="grid-column: text; margin-bottom: 60px;"><span style='font-style: italic;'>An</span> <span style='font-style: italic;'>informal note on some intuitions related to Mechanistic Interpretability by Chris Olah.</span></p></div>
+<d-article>
+<div style="height: 40px;"></div>
+<p>Mechanistic interpretability seeks to reverse engineer neural networks, similar to how one might reverse engineer a compiled binary computer program. After all, neural network parameters are in some sense a binary computer program which runs on one of the exotic virtual machines we call a neural network architecture.</p>
+<p>This is actually quite a deep analogy. We'll discuss it more as this essay unfolds, but some parallels are listed in the table below:</p>
+<style>#comparison-table {margin-top: 20px; margin-bottom: 20px; grid-column: text; width: 100%;} #comparison-table table {width: 100%;} #comparison-table tbody tr:first-child td {border-top: 1px solid rgba(0, 0, 0, 0.15); border-bottom: 1px solid rgba(0, 0, 0, 0.15); background: rgba(0, 0, 0, 0.04); color: black;}</style>
+<div id="comparison-table">
+<table><tbody><tr><td colspan='1' rowspan='1'><p><span style='font-weight: 700;'>Regular Computer Programs</span></p></td><td colspan='1' rowspan='1'><p><span style='font-weight: 700;'>Neural Networks</span></p></td></tr><tr><td colspan='1' rowspan='1'><p>Reverse Engineering</p></td><td colspan='1' rowspan='1'><p>Mechanistic Interpretability</p></td></tr><tr><td colspan='1' rowspan='1'><p>Program Binary</p></td><td colspan='1' rowspan='1'><p>Network Parameters</p></td></tr><tr><td colspan='1' rowspan='1'><p>VM / Processor / Interpreter</p></td><td colspan='1' rowspan='1'><p>Network Architecture</p></td></tr><tr><td colspan='1' rowspan='1'><p>Program State / Memory</p></td><td colspan='1' rowspan='1'><p>Layer Representation / Activations</p></td></tr><tr><td colspan='1' rowspan='1'><p>Variable / Memory Location</p></td><td colspan='1' rowspan='1'><p>Neuron / Feature Direction</p></td></tr></tbody></table>
+</div>
+<p>Taking this analogy seriously can let us explore some of the big picture questions in mechanistic interpretability. Often, questions that feel speculative and slippery for reverse engineering neural networks become clear if you pose the same question for reverse engineering of regular computer programs. And it seems like many of these answers plausibly transfer back over to the neural network case.</p>
+<p>Perhaps the most interesting observation is that this analogy seems to suggest that finding and understanding interpretable neurons – analogous to understanding variables in a computer program – isn't just one of many interesting questions. Arguably, it's the central task.</p>
+<br><br><br><hr><br><br>
+<h2>Attacking the Curse of Dimensionality</h2>
+<p>Every approach to interpretability must somehow overcome the curse of dimensionality. Neural networks are functions which typically have extremely high-dimensional input spaces. The n-dimensional volume of the input space grows exponentially as the number of dimensions increases, making it incredibly large. This is the <span style='font-style: italic;'>curse of dimensionality</span>. It is normally brought up as a challenge to learning functions: how can we learn a function over such a large input space without an exponential amount of data? But it's also a challenge for interpretability: how can we hope to understand a function over such a large space, without an exponential amount of time?<d-footnote>A possible objection is that, while the input space is high-dimensional, we only need to understand the behavior of the function over the data manifold of actual inputs. (I was, at one point, personally quite invested in this approach!) However, while the data manifold is certainly lower dimensional than the input space but for tasks we care about like vision or language, it seems like it must still be very high-dimensional. For example, for any given natural image, it seems like one could move along the data manifold by having an arbitrary object enter the image from any side of the field of view – that's a lot of dimensions!</d-footnote></p>
+<p>One answer is to study toy <a href='https://colah.github.io/posts/2014-03-NN-Manifolds-Topology/'>neural networks with low-dimensional inputs</a>, allowing easy full understanding by dodging the problem. Another answer is to study the behavior of neural networks in a neighborhood around an individual data point of interest – this is roughly the answer of saliency maps.</p>
+<p>How does mechanistic interpretability solve the curse of dimensionality? It's worth asking this question of regular reverse engineering as well! Somehow, a programmer reverse engineering a computer program is able to understand its behavior, often over an incredibly high-dimensional space of inputs. They are able to do this <span style='font-weight: 700;'>because the code gives a non-exponential description of the program's behavior</span>, which is an alternative to understanding the program as a function over a huge input space. We can aim for this same answer in the context of artificial neural networks. Ultimately, the parameters are a finite description of a neural network, if we can somehow understand them.</p>
+<p>Of course, the parameters may be very large – hundreds of billions of parameters for the largest language models! But binary computer programs like a compiled operating system can also be very large, and we're often able to eventually understand them.</p>
+<p>Another consequence is that we shouldn't expect mechanistic interpretability to be easy or have a cookie cutter process that can be followed. People often want interpretability to provide simple answers, a short explanation. But we should expect mechanistic interpretability to be at least as difficult as reverse engineering a large, complicated computer program.</p>
+<br><br><br><hr><br><br>
+<h2>Variables & Activations</h2>
+<p>Understanding a computer program requires us to both understand variables and understand operations acting on those variables. A statement like <code>y = x + 5;</code> is meaningless unless one understands what <code>y</code> and <code>x</code> are. At the same time, ultimately the meaning of <code>y</code> and <code>x</code> comes from how they're used by operations somewhere in the program. Presumably this is why variable names are so useful!</p>
+<p>Reverse engineers generally don't have the benefit of variable names. They need to figure out what each variable actually represents. In fact, that understates the problem. Programs actually act on a collection of computer memory – their <span style='font-style: italic;'>state</span> – which humans think about in terms of discrete variables. In many cases, it's obvious how memory maps to variables, but this isn't always the case. So a reverse engineer must figure out how to segment the memory into variables which can be understood separately, and then what the meaning of those variables is. Put another way, a reverse engineer must assign meaning to positions in memory.</p>
+<p>Reverse engineering neural networks faces an almost identical challenge. As discussed by <a href='https://distill.pub/2020/circuits/visualizing-weights/'>Voss </a><span style='font-style: italic;'><a href='https://distill.pub/2020/circuits/visualizing-weights/'>et al</a></span>, neural network parameters might be thought of as binary instructions, while neuron activations are analogous to variables or memory. Each parameter describes how previous activations affect later activations. We can only understand the meaning of a parameter if we understand the input and output activations.</p>
+<p>But the activations are high dimensional vectors: how can we hope to understand them? We've run back into the curse of dimensionality, but again, regular reverse engineering points at a solution. It's possible to understand computer program memory – also a high-dimensional space! – because we can segment it into variables which can be reasoned about and understood separately. Similarly, we need to break neural network activations into independently understandable pieces.</p>
+<p>In some very special cases, including attention-only transformers (see <a href='https://transformer-circuits.pub/2021/framework/index.html'>Elhage </a><span style='font-style: italic;'><a href='https://transformer-circuits.pub/2021/framework/index.html'>et al</a></span>), we can use linearity to describe all the network's operations in terms of the inputs and outputs of the model. This is similar to how some functions in a computer program can be described solely in terms of the arguments and return value, without intermediate variables. Since we generally understand the inputs and outputs, this allows us to side step the problem. But in most cases, we can't do this – what then?</p>
+<p>If we can't avoid the problem with special tricks, mechanistic interpretability requires that we <span style='font-style: italic;'>must</span> somehow decompose activations into independently understandable pieces.</p>
+<br><br><br><hr><br><br>
+<h2>Simple Memory Layout & Neurons</h2>
+<p>Computer programs often have memory layouts that are convenient to understand. For example, most bytes in memory represent a single thing, rather than having each bit represent something unrelated. This is partly because these layouts are easier for programmers to think about, but it's also because our hardware often makes "simple" contiguous memory layouts more efficient. Having these simple memory layouts makes it easier to reverse engineer computer programs. It makes it easier to figure out how one should break memory up into independently understandable variables.</p>
+<p>Something kind of analogous to this often happens in neural networks.</p>
+<p>Let's assume for a moment that neural networks can be understood in terms of operations on a collection of independent "interpretable features". In principle, one could imagine "interpretable features" being embedded as arbitrary directions in activation space. But often, it seems like neural network layers with activation functions align features with their basis dimensions. This is because the activation functions in some sense make these directions natural and useful. Just as a CPU having operations that act on bytes encourages information to be grouped in bytes rather than randomly scattered over memory, activation functions often encourage features to be aligned with a neuron, rather than correspond to a random linear combination of neurons. We call this a <span style='font-style: italic;'><a href='https://transformer-circuits.pub/2021/framework/index.html#def-privileged-basis'>privileged basis</a></span>.</p>
+<p>Having features align with neurons would make neural networks much easier to reverse engineer. This isn't to say that a neural network is impossible to reverse engineer without neurons being individually understandable. But it seems much harder, just as it is harder to reverse engineer computer programs with strange memory layouts.</p>
+<p>Unfortunately, many neurons can't be understood this way. These <span style='font-style: italic;'>polysemantic neurons</span> seem to help represent features which are not best understood in terms of individual neurons. This is a really tricky problem for reverse engineering neural networks, which we discuss more in the <a href='https://transformer-circuits.pub/2022/solu/index.html'>SoLU paper</a> (see especially <a href='https://transformer-circuits.pub/2022/solu/index.html#section-3'>Section 3</a>).</p>
+<p>For now, the main point we wish to make is that the ability to decompose representations into independently understandable parts seems essential for the success of mechanistic interpretability.</p>
+</d-article>
+<d-appendix style='background: hsla(40,20%,30%,0.05); margin-top: 120px; padding-top: 100px;'>
+<h3>Learn More</h3>
+<p>This essay is a very informal discussion of some of the intuitions that motivate me in personally working on mechanistic interpretability. If you found it interesting and want to learn more about this line of research, check out the <a href='https://distill.pub/2020/circuits'>original Circuits thread</a> and the new <a href='https://transformer-circuits.pub/'>Transformer Circuits thread</a>.</p>
+<div style="height: 30px;"></div>
+<h3>Random Related Topics FAQ<sup><a href='#cmnt1'>[a]</a></sup></h3>
+<div>
+<p><span style='font-weight: 700;'>Doesn't having interpretable neurons go against having a distributed representation?</span></p>
+<p>That isn't how we understand the term "distributed representation" in the context of Deep Learning. For example, a word embedding might have dimensions corresponding to interpretable features such as singular-plural, male-female, and large-small. One could rotate it so that those are basis dimensions. The thing that makes it "distributed" is that independent aspects of words are represented by different directions in representation space.</p>
+<div style="height: 10px;"></div>
+<p><span style='font-weight: 700;'>What do you mean by "feature"?</span></p>
+<p>Defining a "feature" in a satisfying way is surprisingly hard. This isn't necessarily a bad thing. Sometimes when you're trying to understand something, you need to struggle with lots of definitions. (Lakatos' famous <span style='font-style: italic;'><a href='https://math.berkeley.edu/~kpmann/Lakatos.pdf'>Proofs and Refutations</a></span> is a beautiful articulation of this.)</p>
+<p>The easy answer would be to say <span style='font-style: italic;'>a feature is something like curve detector or car detector neurons found in InceptionV1 – some meaningful, articulable property of the input which the network encodes as a direction in activation space.</span> The unsatisfactory thing about this definition is that it's human centric: it excludes the possibility of features humans don't understand.</p>
+<p>An alternative definition, which I find more satisfactory, is to say that <span style='font-style: italic;'>features are whatever the "independent units" a neural network representation can be decomposed into are</span>. That definition is a bit fuzzier, but I suspect it might be getting at something more fundamental. Another idea for a potential human-independent definition is that <span style='font-style: italic;'>features are the things a network would ideally dedicate a neuron to if you gave it enough neurons</span>.</p>
+<p>Some researchers define features simply as any function of the input. The thing I find unsatisfactory about this is that under this definition, any mixture of features is also a feature. It seems to me that there's something importantly different about a "car detector" (which seems to correspond to an important latent variable) from "car and cat detector" (which seems to be an arbitrary mixture of things). I'd like for a definition of a feature to make this distinction. </p>
+<div style="height: 10px;"></div>
+<p><span style='font-weight: 700;'>A lot of people seem to think that modularity is the key thing for understanding neural networks, but the </span><span style='font-weight: 700;'>circuits work keeps focusing on whether neurons can be understood</span><span style='font-weight: 700;'>. Why the difference?</span> </p>
+<p>The brief answer is that both seem very helpful – and we're hopeful they can be linked, as in <a href='https://distill.pub/2020/circuits/branch-specialization/'>branch specialization</a> – but it seems to us that being able to decompose into understandable features <span style='font-style: italic;'>is what makes mechanistic interpretability possible at all </span>while modularity <span style='font-style: italic;'>may make it easier once it is possible</span>.</p>
+<p>The intuitive focus on modularity seems very natural. In day-to-day programming, modularity is often the difference between code being easy or hard to understand. Another intuition is that the only way we'll be able to understand neural networks is if we can break them down into small enough chunks to understand, which seems like a kind of modularity. However, while modularity helps in day to day programming, we think it isn't the thing that makes it possible to understand programs at all. Understanding a computer program written as one giant function might be difficult, but trying to understand a program where memory isn't broken down into variables with coherent meanings (let alone variable names) seems terrifying!</p>
+<p>In some ways, interpretable features create the ultimate kind of modularity: the network can be broken down into individual parameters, since each parameter can be thought of independently as connecting two features.</p>
+</div>
+<div style="height: 30px;"></div>
+<h3>Publication</h3>
+<p>Published June 27, 2022 by Chris Olah.</p>
+<div style="height: 30px;"></div>
+<h3>Acknowledgments</h3>
+<p>The ideas in this note are based on many conversations with others, especially Nelson Elhage, Catherine Olsson, Tristan Hume, Dario Amodei, Chelsea Voss, Nick Cammarata, Gabriel Goh, Neel Nanda, Martin Wattenberg, Shan Carter, and Ludwig Schubert. The note itself was greatly improved by the feedback of Nelson Elhage and Martin Wattenberg.</p>
+<div style="height: 30px;"></div>
+<!--
+<div><p><a href='#cmnt_ref1'>[a]</a>FWIW, one question I have heard people ask a lot is, "What is a feature"?</p></div>
+
+        
+        
+        </body>
+        </html>
+        
