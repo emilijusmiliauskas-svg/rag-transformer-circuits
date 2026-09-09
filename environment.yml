@@ -14,7 +14,7 @@ dependencies:
   - llama-index-embeddings-huggingface
   - python-dotenv
   - sentence-transformers
-  - ragas
+  - ragas>=0.4.3
   - pip
 
 # === Pip Packages ===
