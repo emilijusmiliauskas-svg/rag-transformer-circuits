@@ -1,6 +1,5 @@
 from llama_index.core import (
     StorageContext,
-    SimpleDirectoryReader,
     VectorStoreIndex,
     load_index_from_storage,
 )
@@ -23,6 +22,7 @@ from src.config import (
     VECTOR_STORE_PATH,
     CHAT_MEMORY_TOKEN_LIMIT,
 )
+from src.corpus import load_documents
 from src.model_loader import (
     get_embedding_model,
     initialise_llm,
@@ -38,14 +38,7 @@ def _create_new_vector_store(
         "Creating new vector store from all files in the 'data' directory..."
     )
 
-    documents: list[Document] = SimpleDirectoryReader(
-        input_dir=DATA_PATH
-    ).load_data()
-
-    if not documents:
-        raise ValueError(
-            f"No documents found in {DATA_PATH}. Cannot create vector store."
-        )
+    documents: list[Document] = load_documents(DATA_PATH)
 
     text_splitter: SentenceSplitter = SentenceSplitter(
         chunk_size=CHUNK_SIZE,
@@ -71,7 +64,7 @@ def get_vector_store(embed_model: HuggingFaceEmbedding) -> VectorStoreIndex:
 
     VECTOR_STORE_PATH.mkdir(parents=True, exist_ok=True)
 
-    if any(VECTOR_STORE_PATH.iterdir()):
+    if (VECTOR_STORE_PATH / "docstore.json").exists():
         print("Loading existing vector store from disk...")
         storage_context: StorageContext = StorageContext.from_defaults(
             persist_dir=VECTOR_STORE_PATH.as_posix()

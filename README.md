@@ -57,9 +57,9 @@ RERANKER_MODEL_NAME  = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 RERANKER_TOP_N       = 5                              # passed to the LLM
 ```
 
-Evaluation deliberately uses a **different model family from generation** — `moonshotai/kimi-k2-instruct` as judge and `BAAI/bge-large-en-v1.5` for embeddings — so the system is not grading its own work with its own weights.
+Evaluation uses a separate judge model and a separate embedding model from generation — see *Status* for the independence caveat the free tier forces.
 
-## A Data-Quality Problem That Outweighs All of This
+## The Corpus Was 97.7% Noise — Now Fixed, Numbers Pending Re-Run
 
 Reviewing this repository after the fact, the index turns out to be mostly garbage.
 
@@ -79,16 +79,47 @@ Six papers should produce a few thousand chunks. They produced a hundred and ten
 - **Why context precision sat at 0.72** in the later stages rather than the 1.0 the baseline reported.
 - **Why HyDE degraded so sharply.** A hypothetical answer embedded against a corpus dominated by base64 has far more opportunity to land on nothing useful.
 
-The fix is at ingestion, not in tuning: extract text with an HTML parser and drop `data:` URIs before chunking. **That single change would very likely dominate every gain measured in the four stages**, and the whole ablation should be re-run afterwards — the current rankings may not survive it.
+### The fix, now applied
 
-Kept here rather than quietly corrected, because the finding is more instructive than the tuning was: **no amount of retrieval tuning compensates for a corpus you did not inspect.** The pipeline that measured all this is sound and can re-run the moment the corpus is clean.
+[`src/corpus.py`](src/corpus.py) parses the HTML instead of reading it as text, strips scripts, styles and `head`, and drops `data:` URIs before chunking. Both the app and the evaluation harness now load through it.
+
+| | Before | After |
+|---|---:|---:|
+| Bytes on disk | 51.3 MB | 51.3 MB |
+| Text extracted | — | 596k chars (**1.16%**) |
+| Nodes at 512/50 | 110,370 | **290** |
+
+**The tables above are still the old numbers, measured over the polluted index.** They are left in place, clearly marked, because deleting them would hide the finding. The re-run is blocked on API quota rather than on anything in this repository — see *Status* below.
+
+The lesson stands regardless: **no amount of retrieval tuning compensates for a corpus you did not inspect.**
+
+### Other fixes applied alongside
+
+- **Generation parameters now reach the model.** `temperature`, `max_tokens` and `top_p` are passed to `Groq()`; they were previously declared and ignored. `repetition_penalty` has no equivalent in Groq's OpenAI-compatible API and is documented as such rather than left as a dead constant.
+- **The system prompt now grounds the model** — answer only from context, say so when the context does not contain the answer — replacing `"You are a helpful chatbot. Be friendly and conversational."`
+- **Judge model replaced.** `moonshotai/kimi-k2-instruct` was retired from Groq. See *Status* for what replaced it and at what cost.
+- **Vector-store loading** no longer treats a stray `.DS_Store` as a valid persisted index.
+
+## Status: Re-Run Blocked on Free-Tier Quota
+
+The clean-corpus ablation has not produced numbers yet. Five attempts each failed for a different, identifiable reason:
+
+| Judge configuration | Failure |
+|---|---|
+| `qwen3.8-27b`, default budget | JSON truncated mid-object; Pydantic parse failed |
+| `qwen3.8-27b`, 8000 tokens | Free tier caps this model at 1000 output tokens/minute |
+| `gpt-oss-20b`, 2048 tokens | Truncated again — gpt-oss spends part of the budget on a hidden reasoning trace |
+| `gpt-oss-20b`, 2048 + `reasoning_effort: low` | Judge under-thought and returned an empty `{}` |
+| `gpt-oss-20b`, 8000 tokens | Validated on a single question, then exhausted the 200,000 token/day cap |
+
+`AnswerCorrectness` asks the judge to classify every statement in an answer against the ground truth, which is a long structured generation — precisely the shape a throttled free tier handles worst. The configuration is now validated (`faithfulness 0.667, answer_correctness 0.734, context_precision 1.0, context_recall 1.0` on a single question) and the run needs only quota to complete.
 
 ## Honest Limitations
 
-- **The evaluation set is 4 questions.** That is far too small to separate close configurations, and it shows: the same 512/50 setup scored 0.573 correctness in the baseline run and 0.486 in the chunking run. Differences under roughly 0.1 in these tables should be treated as noise, and the HyDE and reranking conclusions rest on gaps large enough to survive it — the 768-vs-512 comparison does not.
+- **The evaluation set is 3 questions.** That is far too small to separate close configurations, and it shows: the same 512/50 setup scored 0.573 correctness in the baseline run and 0.486 in the chunking run. Differences under roughly 0.1 in these tables should be treated as noise, and the HyDE and reranking conclusions rest on gaps large enough to survive it — the 768-vs-512 comparison does not.
 - **Ground truths are hand-written by me**, so answer correctness measures agreement with my reading of the papers.
 - **Single run per configuration.** No seeds, no repeats, no confidence intervals. Repeating each configuration 3–5 times would be the first thing to add.
-- **Generation parameters are never applied.** `src/config.py` defines `LLM_TEMPERATURE = 0.01`, `LLM_TOP_P`, `LLM_MAX_NEW_TOKENS`, and `LLM_REPETITION_PENALTY`, but `initialise_llm()` passes only `api_key` and `model` to `Groq()` — nothing reads those four constants. Generation ran at the provider default rather than near-deterministic, which is the most likely cause of the run-to-run variance noted above.
+- **The judge is no longer from a different family than the generator.** The original design used a cross-family judge so the system would not grade its own work. On Groq's free tier that is not currently reachable, so the judge is `openai/gpt-oss-20b` against a `openai/gpt-oss-120b` generator: a different model and size, same family. That is a weaker independence guarantee and should be read as one.
 
 ## Architecture
 

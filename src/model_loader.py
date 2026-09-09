@@ -6,6 +6,9 @@ from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
 from src.config import (
     LLM_MODEL,
+    LLM_MAX_NEW_TOKENS,
+    LLM_TEMPERATURE,
+    LLM_TOP_P,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_CACHE_PATH,
 )
@@ -24,9 +27,15 @@ def initialise_llm() -> Groq:
             "GROQ_API_KEY not found. Make sure it's set in your .env file."
         )
 
+    # These were declared in config.py but never passed, so generation ran at
+    # the provider default rather than near-deterministic — the likely cause of
+    # the run-to-run variance in the first evaluation round.
     return Groq(
         api_key=api_key,
         model=LLM_MODEL,
+        temperature=LLM_TEMPERATURE,
+        max_tokens=LLM_MAX_NEW_TOKENS,
+        additional_kwargs={"top_p": LLM_TOP_P},
     )
 
 

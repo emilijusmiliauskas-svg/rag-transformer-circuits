@@ -9,7 +9,19 @@ from ragas.metrics import (
 )
 
 # --- LLM Model Configuration ---
-EVALUATION_LLM_MODEL: str = "moonshotai/kimi-k2-instruct"
+# The original judge, moonshotai/kimi-k2-instruct, was retired from Groq.
+#
+# The intent was a judge from a different family than the generator
+# (openai/gpt-oss-120b) so the system does not grade its own work. On Groq's
+# free tier that is not currently achievable: qwen3.8-27b is capped at 1000
+# output tokens/minute, and AnswerCorrectness needs ~2048 to classify an
+# answer without truncating. groq/compound-mini has the headroom but is an
+# agentic system with tool use, which is wrong for a deterministic judge.
+#
+# gpt-oss-20b is therefore the judge: a different model and size from the
+# generator, but the same family. That is a weaker independence guarantee
+# than the original design and is recorded as a limitation in the README.
+EVALUATION_LLM_MODEL: str = "openai/gpt-oss-20b"
 
 # --- Embedding Model Configuration ---
 EVALUATION_EMBEDDING_MODEL_NAME: str = "BAAI/bge-large-en-v1.5"

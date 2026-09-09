@@ -6,11 +6,16 @@ LLM_MODEL: str = "openai/gpt-oss-120b"
 LLM_MAX_NEW_TOKENS: int = 768
 LLM_TEMPERATURE: float = 0.01
 LLM_TOP_P: float = 0.95
-LLM_REPETITION_PENALTY: float = 1.03
+# Groq's OpenAI-compatible API has no repetition_penalty; the equivalent
+# knobs are frequency_penalty / presence_penalty. Left unset.
 
 # --- System Prompt ---
 LLM_SYSTEM_PROMPT: str = (
-    "You are a helpful chatbot. Be friendly and conversational."
+    "You are a research assistant answering questions about mechanistic "
+    "interpretability papers. Answer using only the provided context. "
+    "If the context does not contain the answer, say so plainly rather "
+    "than drawing on outside knowledge or speculating. Quote the papers' "
+    "own terminology where it is precise, and keep answers concise."
 )
 
 # --- Embedding Model Configuration ---

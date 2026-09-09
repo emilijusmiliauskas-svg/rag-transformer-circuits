@@ -27,9 +27,19 @@ def initialise_evaluation_llm() -> Groq:
             "Make sure it's set in your .env file."
         )
 
+    # AnswerCorrectness asks the judge to classify every statement in an
+    # answer against the ground truth, which runs long. Two things broke that
+    # before: at 2048 tokens the JSON truncated mid-object, and gpt-oss also
+    # spends part of the completion on a hidden reasoning trace drawn from the
+    # same budget. Lowering reasoning_effort freed budget but made the judge
+    # under-think and return an empty object, so the fix is simply a larger
+    # budget at default effort. gpt-oss-20b has no output-per-minute cap on
+    # the free tier (unlike qwen3.8-27b, which is limited to 1000).
     return Groq(
         api_key=api_key,
         model=EVALUATION_LLM_MODEL,
+        temperature=0.0,
+        max_tokens=8000,
     )
 
 

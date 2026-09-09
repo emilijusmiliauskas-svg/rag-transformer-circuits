@@ -6,7 +6,6 @@ from typing import Any
 
 from llama_index.core import (
     Document,
-    SimpleDirectoryReader,
     StorageContext,
     VectorStoreIndex,
     load_index_from_storage,
@@ -19,6 +18,7 @@ from ragas.dataset_schema import EvaluationResult
 from ragas.executor import Executor
 from ragas.embeddings import HuggingFaceEmbeddings
 from ragas import evaluate
+from ragas.run_config import RunConfig
 from ragas.llms.base import LlamaIndexLLMWrapper
 
 from evaluation.evaluation_config import (
@@ -29,6 +29,7 @@ from evaluation.evaluation_config import (
     EVALUATION_METRICS,
 )
 from evaluation.evaluation_questions import EVALUATION_DATA
+from src.corpus import load_documents
 from src.config import DATA_PATH
 
 
@@ -41,6 +42,17 @@ def get_evaluation_data() -> tuple[list[str], list[str]]:
         item["ground_truth"] for item in EVALUATION_DATA
     ]
 
+
+
+# The judge produces long structured output and the free tier throttles it,
+# so RAGAS's default 180s per-metric timeout and 10 retries are both too
+# tight; a single AnswerCorrectness call can spend minutes in backoff.
+EVALUATION_RUN_CONFIG: RunConfig = RunConfig(
+    timeout=900,
+    max_retries=15,
+    max_wait=90,
+    max_workers=2,
+)
 
 def get_best_config_from_results(
     filename_prefix: str,
@@ -125,9 +137,7 @@ def get_or_build_index(
         )
     else:
         print(f"--- Creating new index for: {vector_store_id} ---")
-        documents: list[Document] = SimpleDirectoryReader(
-            input_dir=DATA_PATH
-        ).load_data()
+        documents: list[Document] = load_documents(DATA_PATH)
 
         text_splitter: SentenceSplitter = SentenceSplitter(
             chunk_size=chunk_size, chunk_overlap=chunk_overlap
@@ -207,6 +217,7 @@ def evaluate_without_rate_limit(
         llm=ragas_llm,
         embeddings=ragas_embeddings,
         raise_exceptions=True,
+        run_config=EVALUATION_RUN_CONFIG,
     )
 
     results_df: pd.DataFrame = result.to_pandas()
@@ -247,6 +258,7 @@ def evaluate_with_rate_limit(
             llm=ragas_llm,
             embeddings=ragas_embeddings,
             raise_exceptions=True,
+            run_config=EVALUATION_RUN_CONFIG,
         )
 
         partial_results_list.append(result.to_pandas())
