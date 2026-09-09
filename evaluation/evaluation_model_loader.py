@@ -1,11 +1,12 @@
 import os
 from dotenv import load_dotenv
 
-from llama_index.llms.groq import Groq
+from llama_index.llms.openai_like import OpenAILike
 from ragas.embeddings import HuggingFaceEmbeddings
 from ragas.llms.base import LlamaIndexLLMWrapper
 
 from evaluation.evaluation_config import (
+    EVALUATION_LLM_API_BASE,
     EVALUATION_LLM_MODEL,
     EVALUATION_EMBEDDING_MODEL_NAME,
     EVALUATION_EMBEDDING_CACHE_PATH,
@@ -16,30 +17,45 @@ from evaluation.evaluation_config import (
 load_dotenv()
 
 
-def initialise_evaluation_llm() -> Groq:
-    """Initialises the Groq LLM with core parameters from config."""
+def initialise_evaluation_llm() -> OpenAILike:
+    """
+    Initialises the judge model.
 
-    api_key: str | None = os.getenv("GROQ_API_KEY")
+    DeepSeek exposes an OpenAI-compatible endpoint, so OpenAILike is used
+    rather than a provider-specific class — OpenAI's own wrapper rejects
+    model names it does not recognise.
+    """
+
+    api_key: str | None = os.getenv("DEEPSEEK_API_KEY")
 
     if not api_key:
         raise ValueError(
-            "GROQ_API_KEY not found. "
-            "Make sure it's set in your .env file."
+            "DEEPSEEK_API_KEY not found. Set it in .env, or point "
+            "load_dotenv() at an env file that defines it."
         )
 
-    # AnswerCorrectness asks the judge to classify every statement in an
-    # answer against the ground truth, which runs long. Two things broke that
-    # before: at 2048 tokens the JSON truncated mid-object, and gpt-oss also
-    # spends part of the completion on a hidden reasoning trace drawn from the
-    # same budget. Lowering reasoning_effort freed budget but made the judge
-    # under-think and return an empty object, so the fix is simply a larger
-    # budget at default effort. gpt-oss-20b has no output-per-minute cap on
-    # the free tier (unlike qwen3.8-27b, which is limited to 1000).
-    return Groq(
+    # The budget has to be generous, and for a non-obvious reason: DeepSeek V4
+    # draws hidden reasoning tokens from the same allowance as the answer. Set
+    # it too low and the reasoning consumes the whole budget, so the API
+    # returns success with an *empty* body, which then fails to parse as JSON.
+    # Measured on the Faithfulness NLI prompt, 5 calls each:
+    #
+    #   max_tokens=2048  -> 3/5 empty
+    #   max_tokens=4096  -> 0/5 empty
+    #   max_tokens=8000  -> 0/5 empty
+    #   max_tokens=16000 -> 0/5 empty
+    #
+    # Actual content is only ~900 characters; the headroom is for the
+    # reasoning, not the answer. AnswerCorrectness sends far more input than
+    # the NLI prompt, so 16000 buys margin over the measured floor.
+    return OpenAILike(
         api_key=api_key,
+        api_base=EVALUATION_LLM_API_BASE,
         model=EVALUATION_LLM_MODEL,
         temperature=0.0,
-        max_tokens=8000,
+        max_tokens=16000,
+        is_chat_model=True,
+        timeout=600.0,
     )
 
 
