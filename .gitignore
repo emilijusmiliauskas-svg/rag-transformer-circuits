@@ -17,4 +17,4 @@ venv/
 .DS_Store
 
 # Evaluation run logs
-evaluation/run.log
+evaluation/run*.log

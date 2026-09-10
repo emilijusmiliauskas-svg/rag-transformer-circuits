@@ -1,9 +1,10 @@
 import os
 from dotenv import load_dotenv
 
-from llama_index.llms.openai_like import OpenAILike
 from ragas.embeddings import HuggingFaceEmbeddings
 from ragas.llms.base import LlamaIndexLLMWrapper
+
+from evaluation.retrying_llm import RetryOnEmptyLLM
 
 from evaluation.evaluation_config import (
     EVALUATION_LLM_API_BASE,
@@ -17,7 +18,7 @@ from evaluation.evaluation_config import (
 load_dotenv()
 
 
-def initialise_evaluation_llm() -> OpenAILike:
+def initialise_evaluation_llm() -> RetryOnEmptyLLM:
     """
     Initialises the judge model.
 
@@ -34,28 +35,37 @@ def initialise_evaluation_llm() -> OpenAILike:
             "load_dotenv() at an env file that defines it."
         )
 
-    # The budget has to be generous, and for a non-obvious reason: DeepSeek V4
-    # draws hidden reasoning tokens from the same allowance as the answer. Set
-    # it too low and the reasoning consumes the whole budget, so the API
-    # returns success with an *empty* body, which then fails to parse as JSON.
+    # Thinking is disabled deliberately, and it is the fix for a failure that
+    # took a while to pin down.
+    #
+    # DeepSeek V4 draws reasoning tokens from the same max_tokens allowance as
+    # the answer. When reasoning consumes the budget the API returns a
+    # well-formed HTTP 200 whose content is an empty string — no error, no
+    # truncation flag. RAGAS cannot parse that, its repair prompt has nothing
+    # to repair, and the whole evaluation aborts, discarding every result
+    # gathered so far.
+    #
     # Measured on the Faithfulness NLI prompt, 5 calls each:
     #
-    #   max_tokens=2048  -> 3/5 empty
-    #   max_tokens=4096  -> 0/5 empty
-    #   max_tokens=8000  -> 0/5 empty
-    #   max_tokens=16000 -> 0/5 empty
+    #   thinking ON,  max_tokens=2048  -> 5/5 empty
+    #   thinking OFF, max_tokens=2048  -> 0/5 empty
+    #   thinking OFF, max_tokens=4096  -> 0/5 empty
     #
-    # Actual content is only ~900 characters; the headroom is for the
-    # reasoning, not the answer. AnswerCorrectness sends far more input than
-    # the NLI prompt, so 16000 buys margin over the measured floor.
-    return OpenAILike(
+    # It is a threshold effect, not a flaky one, which is why it looked random
+    # across prompts of differing length. RAGAS's prompts are classification
+    # tasks and do not need a reasoning pass, so turning it off costs nothing
+    # and makes the judge deterministic, cheaper and faster.
+    #
+    # RetryOnEmptyLLM stays as a safety net for any empty that slips through.
+    return RetryOnEmptyLLM(
         api_key=api_key,
         api_base=EVALUATION_LLM_API_BASE,
         model=EVALUATION_LLM_MODEL,
         temperature=0.0,
-        max_tokens=16000,
+        max_tokens=8000,
         is_chat_model=True,
         timeout=600.0,
+        additional_kwargs={"extra_body": {"thinking": {"type": "disabled"}}},
     )
 
 

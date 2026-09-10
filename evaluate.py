@@ -10,11 +10,11 @@ if __name__ == "__main__":
     # Each stage auto-reads the winning config from the prior stage's
     # latest results CSV. To re-run just one stage, comment out the others.
 
-    # Stage 1: Baseline Evaluation
-    evaluate_baseline()
+    # Stage 1: Baseline Evaluation — already complete, results on disk
+    # evaluate_baseline()
 
-    # Stage 2: Chunking Strategy Evaluation
-    evaluate_chunking_strategies()
+    # Stage 2: Chunking Strategy Evaluation — complete, results on disk
+    # evaluate_chunking_strategies()
 
     # Stage 3: Reranker Strategy Evaluation
     #   (auto-picks best chunk_size/chunk_overlap from stage 2)

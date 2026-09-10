@@ -1,125 +1,110 @@
 # Transformer Circuits RAG: An Ablation Study
 
-A retrieval-augmented generation system over six Anthropic mechanistic-interpretability papers — built with LlamaIndex and Groq, then **measured at every stage** with a RAGAS evaluation pipeline rather than tuned by intuition.
+A retrieval-augmented generation system over six Anthropic mechanistic-interpretability papers — built with LlamaIndex, then **tuned by measurement rather than intuition**, and then re-run from scratch after the corpus turned out to be almost entirely noise.
 
-Four staged experiments: baseline → chunking strategy → cross-encoder reranking → query rewriting. Each stage reads the winning configuration from the previous stage's results and sweeps one variable.
+The system itself is ordinary: LlamaIndex, a vector store, a cross-encoder reranker, a Streamlit front end. The point of the repository is the evaluation around it, and what happened when the evaluation was pointed at its own inputs.
 
 ---
 
-## What Was Actually Measured
+## The Short Version
 
-Every number below comes from a committed CSV in [`evaluation/evaluation_results/`](evaluation/evaluation_results/).
+Four staged experiments — baseline → chunking → reranking → query rewriting — each feeding its winning configuration into the next, scored on four RAGAS metrics by an independent judge model.
+
+Then the index was audited and found to be **97.7% base64 image data**. Six papers had produced 110,370 nodes; after parsing the HTML properly, they produce **290**.
+
+Everything was re-run on the clean corpus. **One of the three original conclusions reversed. Two held.**
+
+| Stage | Winner | vs. the original run |
+|---|---|---|
+| Chunking | **1024 / 200** | **Reversed** — 512 had won, 1024 had been worst |
+| Reranking | **k=10, n=5** | Confirmed |
+| Query rewriting (HyDE) | **off** | Confirmed |
+
+That mix is the useful result. Not "the old numbers were all wrong," and not "nothing changed" — one specific conclusion was an artifact of the data, and the audit is what exposed it.
+
+## Results
+
+All figures come from the committed CSVs in [`evaluation/evaluation_results/`](evaluation/evaluation_results/).
+
+### Stage 1 — Baseline (512 / 50)
+
+| Faithfulness | Answer correctness | Context precision | Context recall |
+|:---:|:---:|:---:|:---:|
+| 0.632 | 0.473 | 0.703 | 0.667 |
 
 ### Stage 2 — Chunking strategy
 
-| Chunk size | Overlap | Faithfulness | Answer correctness | Context precision |
-|-----------:|--------:|:------------:|:------------------:|:-----------------:|
-| **512** | 50 | 1.000 | 0.486 | 1.000 |
-| 768 | 115 | 0.778 | **0.502** | 1.000 |
-| 1024 | 200 | 1.000 | 0.387 | 1.000 |
+| Chunk / overlap | Faithfulness | Answer correctness | Context precision | Context recall |
+|---|:---:|:---:|:---:|:---:|
+| 512 / 50 | 0.747 | 0.546 | 0.612 | 0.833 |
+| 768 / 115 | 0.620 | 0.633 | 0.756 | 0.833 |
+| **1024 / 200** | **0.902** | **0.682** | 0.691 | **1.000** |
 
-Larger chunks were worse. At 1024 tokens, answer correctness fell 20% against the 512 baseline — retrieving a large block dilutes the relevant passage with surrounding text the LLM then has to filter. 768 edged out 512 on correctness but lost faithfulness, so 512 carried forward.
+**Larger chunks win, which is the opposite of the original finding.** The first run reported 1024 as the worst configuration, with answer correctness 20% below 512, and explained it as a large block diluting the relevant passage with surrounding text.
 
-### Stage 3 — Cross-encoder reranking
+That explanation was wrong, but the measurement was real: when 97.7% of the index is base64, a bigger chunk really does sweep in proportionally more binary. Remove the binary and the effect inverts — more context helps, as you would expect.
 
-| Retriever k | Reranker n | Faithfulness | Answer correctness | Context precision | Context recall |
-|------------:|-----------:|:------------:|:------------------:|:-----------------:|:--------------:|
-| 10 | 2 | 0.454 | 0.535 | 0.500 | 0.667 |
-| 10 | 5 | 0.906 | 0.659 | 0.722 | **1.000** |
-| 20 | 5 | **0.925** | **0.664** | 0.722 | 0.833 |
+### Stage 3 — Cross-encoder reranking (at 1024 / 200)
 
-**Reranking was the single biggest win** — answer correctness rose from 0.486 to 0.659 by retrieving 10 chunks and letting a cross-encoder pick the best 5.
+| retriever k | reranker n | Faithfulness | Answer correctness | Context precision |
+|---:|---:|:---:|:---:|:---:|
+| 10 | 2 | 0.795 | 0.494 | 0.667 |
+| **10** | **5** | **0.861** | **0.620** | **0.796** |
+| 20 | 5 | 0.804 | 0.601 | 0.717 |
 
-Cutting to the top 2 was actively harmful: faithfulness collapsed to 0.454 and recall to 0.667. Two chunks simply don't contain enough evidence, and the model fills the gap by inventing. Widening the pool to k=20 bought a marginal correctness gain while *dropping* recall to 0.833 — more candidates gave the reranker more chances to discard something it needed. `k=10, n=5` was selected.
+Both failure modes from the original run reproduce. **Cutting to the top 2 is actively harmful** — two chunks don't carry enough evidence and the model fills the gap. **Widening the pool to k=20 doesn't help either**: more candidates give the reranker more opportunities to discard something it needed, and precision drops.
 
-### Stage 4 — Query rewriting (HyDE)
+### Stage 4 — Query rewriting with HyDE (at 1024 / 200, k=10, n=5)
 
 | HyDE | Faithfulness | Answer correctness | Context precision |
-|:----:|:------------:|:------------------:|:-----------------:|
-| off | 0.838 | **0.678** | **0.722** |
-| on | **0.885** | 0.580 | 0.522 |
+|:---:|:---:|:---:|:---:|
+| **off** | **0.956** | **0.702** | **0.712** |
+| on | 0.736 | 0.594 | 0.679 |
 
-**HyDE made things worse and was rejected.** Generating a hypothetical answer to retrieve against cost 14% of answer correctness and 28% of context precision.
+**Rejected, as before.** Generating a hypothetical answer to retrieve against costs 23% faithfulness and 15% answer correctness.
 
-The likely reason is domain mismatch: HyDE works by having the LLM draft a plausible answer and embedding *that*. On narrow technical material — superposition, induction heads — the model's hypothetical answer drifts toward generic ML language, and the drafted text pulls retrieval away from the actual papers. Faithfulness rose slightly because the model grew more cautious with weaker context, which is not an improvement worth having.
+The likely reason is domain mismatch. HyDE works by having the model draft a plausible answer and embedding *that*. On narrow technical material — superposition, induction heads, sparse autoencoders — the draft drifts toward generic ML language and pulls retrieval away from the actual papers.
+
+## The Corpus Problem
+
+The papers were saved as single-file HTML with inline base64 images. `SimpleDirectoryReader` reads those files as plain text, so the image data was chunked and embedded alongside the prose.
+
+| | Before | After |
+|---|---:|---:|
+| Bytes on disk | 51.3 MB | 51.3 MB |
+| Extractable text | — | 596k chars (**1.16%**) |
+| Nodes at 512/50 | 110,370 | **290** |
+| Base64 blobs (n=1000 sample) | 97.7% | — |
+
+`monosemanticity.html` alone is 20 MB, almost none of which is text.
+
+[`src/corpus.py`](src/corpus.py) parses the HTML with BeautifulSoup, drops `script`, `style` and `head`, and strips `data:` URIs before chunking. Both the application and the evaluation harness load through it.
+
+The lesson is the part worth keeping: **no amount of retrieval tuning compensates for a corpus you did not inspect.** The first round of tuning was careful, internally consistent, and pointed the wrong way on chunk size.
 
 ## Final Configuration
 
-The winning setup, in [`src/config.py`](src/config.py):
+In [`src/config.py`](src/config.py):
 
 ```python
-LLM_MODEL            = "openai/gpt-oss-120b"          # via Groq
+LLM_MODEL            = "openai/gpt-oss-120b"          # via OpenRouter
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-CHUNK_SIZE           = 512
-CHUNK_OVERLAP        = 50
+CHUNK_SIZE           = 1024
+CHUNK_OVERLAP        = 200
 SIMILARITY_TOP_K     = 10                             # pool before reranking
 RERANKER_MODEL_NAME  = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 RERANKER_TOP_N       = 5                              # passed to the LLM
 ```
 
-Evaluation uses a separate judge model and a separate embedding model from generation — see *Status* for the independence caveat the free tier forces.
-
-## The Corpus Was 97.7% Noise — Now Fixed, Numbers Pending Re-Run
-
-Reviewing this repository after the fact, the index turns out to be mostly garbage.
-
-The corpus was saved as **single-file HTML with inline base64 images**, and `SimpleDirectoryReader` ingests those files as raw text. The base64 blobs get chunked and embedded alongside the prose:
-
-| | |
-|---|---:|
-| Nodes in the vector store | 110,370 |
-| Base64/binary blobs (sampled, n=1000) | **97.7%** |
-| Estimated real prose nodes | ~2,500 |
-
-Six papers should produce a few thousand chunks. They produced a hundred and ten thousand, because `monosemanticity.html` alone is 20 MB and almost none of that is text.
-
-**This reframes every result above.** The tuning was real and the measurements are honest, but they were all made over an index that is 97.7% noise — which plausibly explains the pattern in the numbers:
-
-- **Why reranking was the biggest win by such a margin.** The cross-encoder was earning its gains partly by discarding junk the embedding retriever kept surfacing. Against a clean index, its marginal value would likely be much smaller.
-- **Why context precision sat at 0.72** in the later stages rather than the 1.0 the baseline reported.
-- **Why HyDE degraded so sharply.** A hypothetical answer embedded against a corpus dominated by base64 has far more opportunity to land on nothing useful.
-
-### The fix, now applied
-
-[`src/corpus.py`](src/corpus.py) parses the HTML instead of reading it as text, strips scripts, styles and `head`, and drops `data:` URIs before chunking. Both the app and the evaluation harness now load through it.
-
-| | Before | After |
-|---|---:|---:|
-| Bytes on disk | 51.3 MB | 51.3 MB |
-| Text extracted | — | 596k chars (**1.16%**) |
-| Nodes at 512/50 | 110,370 | **290** |
-
-**The tables above are still the old numbers, measured over the polluted index.** They are left in place, clearly marked, because deleting them would hide the finding. The re-run is blocked on API quota rather than on anything in this repository — see *Status* below.
-
-The lesson stands regardless: **no amount of retrieval tuning compensates for a corpus you did not inspect.**
-
-### Other fixes applied alongside
-
-- **Generation parameters now reach the model.** `temperature`, `max_tokens` and `top_p` are passed to `Groq()`; they were previously declared and ignored. `repetition_penalty` has no equivalent in Groq's OpenAI-compatible API and is documented as such rather than left as a dead constant.
-- **The system prompt now grounds the model** — answer only from context, say so when the context does not contain the answer — replacing `"You are a helpful chatbot. Be friendly and conversational."`
-- **Judge model replaced.** `moonshotai/kimi-k2-instruct` was retired from Groq. See *Status* for what replaced it and at what cost.
-- **Vector-store loading** no longer treats a stray `.DS_Store` as a valid persisted index.
-
-## Status: Re-Run Blocked on Free-Tier Quota
-
-The clean-corpus ablation has not produced numbers yet. Five attempts each failed for a different, identifiable reason:
-
-| Judge configuration | Failure |
-|---|---|
-| `qwen3.8-27b`, default budget | JSON truncated mid-object; Pydantic parse failed |
-| `qwen3.8-27b`, 8000 tokens | Free tier caps this model at 1000 output tokens/minute |
-| `gpt-oss-20b`, 2048 tokens | Truncated again — gpt-oss spends part of the budget on a hidden reasoning trace |
-| `gpt-oss-20b`, 2048 + `reasoning_effort: low` | Judge under-thought and returned an empty `{}` |
-| `gpt-oss-20b`, 8000 tokens | Validated on a single question, then exhausted the 200,000 token/day cap |
-
-`AnswerCorrectness` asks the judge to classify every statement in an answer against the ground truth, which is a long structured generation — precisely the shape a throttled free tier handles worst. The configuration is now validated (`faithfulness 0.667, answer_correctness 0.734, context_precision 1.0, context_recall 1.0` on a single question) and the run needs only quota to complete.
+Evaluation uses **DeepSeek V4 Flash** as judge and `BAAI/bge-large-en-v1.5` for its embeddings — deliberately a different model family from the generator, so the system is not grading its own work with its own weights.
 
 ## Honest Limitations
 
-- **The evaluation set is 3 questions.** That is far too small to separate close configurations, and it shows: the same 512/50 setup scored 0.573 correctness in the baseline run and 0.486 in the chunking run. Differences under roughly 0.1 in these tables should be treated as noise, and the HyDE and reranking conclusions rest on gaps large enough to survive it — the 768-vs-512 comparison does not.
+- **The evaluation set is 3 questions.** Far too small to separate close configurations.
+- **Run-to-run variance is larger than several of the gaps above.** The identical configuration (1024/200, k=10, n=5, no HyDE) scored **0.861 faithfulness / 0.620 correctness** in stage 3 and **0.956 / 0.702** in stage 4. Differences smaller than roughly 0.1 should not be read as real. The chunking reversal and the HyDE rejection are large enough to survive this; the 768-vs-512 comparison is not.
+- **Single run per configuration.** No repeats, no confidence intervals. Repeating each configuration 3–5 times is the first thing to add.
 - **Ground truths are hand-written by me**, so answer correctness measures agreement with my reading of the papers.
-- **Single run per configuration.** No seeds, no repeats, no confidence intervals. Repeating each configuration 3–5 times would be the first thing to add.
-- **The judge is no longer from a different family than the generator.** The original design used a cross-family judge so the system would not grade its own work. On Groq's free tier that is not currently reachable, so the judge is `openai/gpt-oss-20b` against a `openai/gpt-oss-120b` generator: a different model and size, same family. That is a weaker independence guarantee and should be read as one.
+- **Stage 1 ran on a different judge** (`moonshotai/kimi-k2-instruct`, since retired from Groq) than stages 2–4. Its absolute numbers are not directly comparable with the later stages; the within-stage rankings are.
 
 ## Architecture
 
@@ -129,13 +114,14 @@ rag_project/
 ├── main.py                   # Terminal chat entry point
 ├── evaluate.py               # Runs the four evaluation stages
 ├── src/
-│   ├── config.py             # Production settings (the winning values above)
-│   ├── model_loader.py       # Groq LLM + HuggingFace embeddings, cached
+│   ├── corpus.py             # HTML → prose. The fix described above
+│   ├── config.py             # Production settings (the winning values)
+│   ├── model_loader.py       # Generator + embeddings
 │   └── engine.py             # Vector store + CondensePlusContext chat engine
 ├── evaluation/
 │   ├── evaluation_engine.py  # The four staged experiments
 │   ├── evaluation_config.py  # Judge model, metrics, sweep grids
-│   ├── evaluation_questions.py
+│   ├── retrying_llm.py       # Re-asks when the judge returns an empty body
 │   └── evaluation_results/   # Committed CSVs — every number in this README
 ├── initial/                  # 7 notebooks: the build, step by step
 └── data/                     # 6 HTML papers from transformer-circuits.pub
@@ -143,7 +129,15 @@ rag_project/
 
 Retrieval uses `CondensePlusContextChatEngine`, which rewrites a follow-up question into a standalone query using chat history before retrieving — so multi-turn conversation works rather than each turn retrieving on a fragment.
 
-Each evaluation stage auto-reads the previous stage's winning configuration from its results CSV, so the pipeline is re-runnable end to end without hand-copying parameters between stages.
+Each evaluation stage auto-reads the previous stage's winning configuration from its results CSV, so the pipeline re-runs end to end without hand-copying parameters between stages.
+
+## Two Provider Problems Worth Recording
+
+Both cost real time, and neither is obvious from the documentation.
+
+**Reasoning tokens are drawn from the answer's budget.** DeepSeek V4 and gpt-oss both spend hidden reasoning tokens out of `max_tokens`. When reasoning consumes the allowance, the API returns a well-formed HTTP 200 with an **empty content string** — no error, no truncation flag. RAGAS cannot parse that, its repair prompt has nothing to repair, and the entire evaluation aborts. Measured on the Faithfulness prompt: thinking on at 2048 tokens gave 5/5 empty responses; thinking off gave 0/5. Disabling thinking for the judge fixed it outright.
+
+**Free tiers cannot carry this workload.** Groq caps at 200,000 tokens/day per model. One four-stage ablation exhausts that — especially once 1024-token chunks meant every generation carried ~5k tokens of retrieved context. Generation moved to the same model on OpenRouter, which kept results comparable across stages while removing the ceiling. The full run cost roughly one cent.
 
 ## The Corpus
 
@@ -157,17 +151,17 @@ Deliberately chosen as a hard test — dense technical prose with precise termin
 conda env create -f environment.yml
 conda activate rag-project-env
 
-cp .env.example .env        # add your Groq API key
+cp .env.example .env        # add your API keys
 streamlit run app.py        # web UI
 python main.py              # terminal chat
 python evaluate.py          # re-run the evaluation stages
 ```
 
-First run downloads the embedding model and builds the vector store into `local_storage/` (git-ignored, ~1.3 GB). The evaluation pipeline sleeps between calls to stay inside Groq's free-tier rate limits, so a full four-stage run takes a while.
+First run downloads the embedding model and builds the vector store into `local_storage/` (git-ignored). Individual stages can be enabled or disabled by commenting entries in `evaluate.py`.
 
 ## Notebooks
 
-`initial/` holds the build as seven steps — bare LLM, chatbot, RAG, evaluation, chunking, reranking, query rewriting — each one adding a single component. Useful for following the reasoning; `src/` is the consolidated result.
+`initial/` holds the build as seven steps — bare LLM, chatbot, RAG, evaluation, chunking, reranking, query rewriting — each adding a single component. Useful for following the reasoning; `src/` is the consolidated result.
 
 ## License
 
