@@ -22,21 +22,17 @@ Everything was re-run on the clean corpus. **One of the three original conclusio
 
 That mix is the useful result. Not "the old numbers were all wrong," and not "nothing changed" — one specific conclusion was an artifact of the data, and the audit is what exposed it.
 
-## What's Actually In Here
-
-Anyone can point LlamaIndex at a folder of PDFs and get a chatbot. That part of this repository is unremarkable and took an afternoon. Here is everything else, roughly in order of how commonly you'd find it in a project this size:
+## What's In Here
 
 | | Where to look |
 |---|---|
 | Embeddings, a vector store, a Streamlit chat UI | `src/engine.py`, `app.py` |
-| A **cross-encoder reranker** — retrieve 10, re-score, pass the best 5 to the model. Retrieval has stages; one similarity search is rarely enough | `src/engine.py` |
-| **Measurement instead of impressions** — four RAGAS metrics, every result written to CSV and committed rather than screenshotted | `evaluation/evaluation_results/` |
-| **A staged design**, where each experiment inherits the previous winner instead of testing everything against defaults | `evaluation/evaluation_engine.py` |
-| **A technique tried and rejected.** HyDE is fashionable and it made things worse here, so it isn't in the final configuration | Stage 4, below |
-| **An audit of the inputs.** The index turned out to be 97.7% base64 image data. Finding that meant re-running everything and publishing a correction | `src/corpus.py` |
-| **A statement of what the numbers can't support.** The same configuration scored 0.861 and 0.956 on two different runs, so gaps under ~0.1 are noise, and the README says so | *Honest Limitations*, below |
-
-The last three are the ones worth your time. Tuning a retrieval pipeline is a solved, documented exercise. Noticing that a careful tuning run was measuring the wrong thing entirely — and that one of its conclusions inverts once fixed — is the part that isn't in any tutorial.
+| **Cross-encoder reranking** — retrieve 10, re-score, pass the best 5 to the model | `src/engine.py` |
+| **Four RAGAS metrics**, with every result written to CSV and committed | `evaluation/evaluation_results/` |
+| **A staged design** — each experiment inherits the previous stage's winning configuration | `evaluation/evaluation_engine.py` |
+| **A technique tried and rejected** — HyDE degraded results, so it is not in the final configuration | Stage 4, below |
+| **An audit of the inputs** — the index was 97.7% base64 image data, which meant re-running everything | `src/corpus.py` |
+| **The limits of the numbers** — the same configuration scored 0.861 and 0.956 across two runs, so gaps under ~0.1 are noise | *Honest Limitations*, below |
 
 ## Results
 
